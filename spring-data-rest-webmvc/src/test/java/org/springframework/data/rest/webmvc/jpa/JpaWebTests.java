@@ -1,5 +1,5 @@
 /*
- * Copyright 2013 the original author or authors.
+ * Copyright 2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,10 +36,14 @@ import org.springframework.transaction.annotation.Transactional;
  * Web integration tests specific to JPA.
  * 
  * @author Oliver Gierke
+ * @author Nick Weedon
  */
 @Transactional
 @ContextConfiguration(classes = JpaRepositoryConfig.class)
 public class JpaWebTests extends AbstractWebIntegrationTests {
+
+	static final String LINK_TO_SIBLINGS_OF = "$._embedded..[?(@.firstName == '%s')]._links.siblings.href[0]";
+	static final String EMPTY_JSON_OBJECT_STRING = "{ }";
 
 	@Autowired TestDataPopulator loader;
 	@Autowired ResourceMappings mappings;
@@ -106,4 +110,15 @@ public class JpaWebTests extends AbstractWebIntegrationTests {
 		Link creatorLink = assertHasContentLinkWithRel("creator", orders);
 		assertThat(request(creatorLink), is(notNullValue()));
 	}
+	
+	@Test
+	/**
+	 * @see DATAREST-217
+	 */
+	public void doesNotExposeUnexportedAnimalEntities() throws Exception {
+		MockHttpServletResponse response = mvc.perform(get("/animal")).andReturn().getResponse();
+		
+		assertEquals("Expected no entities to be returned.", EMPTY_JSON_OBJECT_STRING, response.getContentAsString());
+	}
+
 }
