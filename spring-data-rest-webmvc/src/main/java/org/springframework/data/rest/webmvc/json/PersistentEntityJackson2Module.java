@@ -6,9 +6,11 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,7 +23,6 @@ import org.springframework.data.mapping.Association;
 import org.springframework.data.mapping.PersistentEntity;
 import org.springframework.data.mapping.PersistentProperty;
 import org.springframework.data.mapping.SimpleAssociationHandler;
-import org.springframework.data.mapping.SimplePropertyHandler;
 import org.springframework.data.mapping.model.BeanWrapper;
 import org.springframework.data.repository.support.Repositories;
 import org.springframework.data.rest.core.UriDomainClassConverter;
@@ -45,15 +46,20 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.Version;
 import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.ser.FilterProvider;
+import com.fasterxml.jackson.databind.ser.impl.SimpleBeanPropertyFilter;
+import com.fasterxml.jackson.databind.ser.impl.SimpleFilterProvider;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
+import com.fasterxml.jackson.databind.util.TokenBuffer;
 
 /**
  * @author Jon Brisbin
  */
-public class PersistentEntityJackson2Module extends SimpleModule implements InitializingBean {
+public abstract class PersistentEntityJackson2Module extends SimpleModule implements InitializingBean {
 
 	private static final long serialVersionUID = -7289265674870906323L;
 	private static final Logger LOG = LoggerFactory.getLogger(PersistentEntityJackson2Module.class);
@@ -65,11 +71,14 @@ public class PersistentEntityJackson2Module extends SimpleModule implements Init
 	@Autowired private Repositories repositories;
 	@Autowired private RepositoryRestConfiguration config;
 	@Autowired private UriDomainClassConverter uriDomainClassConverter;
+	private Set<Class<?>> registeredDeserializerDomainClasses;
 
 	public PersistentEntityJackson2Module(ResourceMappings resourceMappings, ConversionService conversionService) {
 
 		super(new Version(1, 1, 0, "BUILD-SNAPSHOT", "org.springframework.data.rest", "jackson-module"));
 
+		registeredDeserializerDomainClasses = new HashSet<Class<?>>();
+		
 		Assert.notNull(resourceMappings, "ResourceMappings must not be null!");
 		Assert.notNull(conversionService, "ConversionService must not be null!");
 
@@ -104,6 +113,7 @@ public class PersistentEntityJackson2Module extends SimpleModule implements Init
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	@Override
 	public void afterPropertiesSet() throws Exception {
+		
 		for (Class<?> domainType : repositories) {
 			PersistentEntity<?, ?> pe = repositories.getPersistentEntity(domainType);
 			if (null == pe) {
@@ -112,6 +122,7 @@ public class PersistentEntityJackson2Module extends SimpleModule implements Init
 				}
 			} else {
 				addDeserializer(domainType, new ResourceDeserializer(pe));
+				registeredDeserializerDomainClasses.add(domainType);
 			}
 		}
 	}
@@ -129,17 +140,63 @@ public class PersistentEntityJackson2Module extends SimpleModule implements Init
 		@SuppressWarnings({ "unchecked", "incomplete-switch", "unused" })
 		@Override
 		public T deserialize(JsonParser jp, DeserializationContext ctxt) throws IOException, JsonProcessingException {
+
+			TokenBuffer tokenBuffer = new TokenBuffer(jp);
+			JsonToken tok = null;
+			
+			int graphDepth = 1;
+			
+			try {
+				do {
+					tok = jp.nextToken();
+					String name = jp.getCurrentName();
+
+					if(tok == JsonToken.END_ARRAY || tok == JsonToken.END_OBJECT) {
+						--graphDepth;
+					}
+
+					for(int i = 1; i < graphDepth; i++) {
+						System.out.print("\t");
+					}
+					System.out.println(name + ": " + tok.toString());
+					
+					if(tok == JsonToken.START_ARRAY || tok == JsonToken.START_OBJECT) {
+						++graphDepth;
+					}
+					// Until proper unit tested support is added, just remove all HAL fields
+					if(tok == JsonToken.FIELD_NAME ) {
+						// TODO: update me to a 'switch(name)' statement when JDK compatibility changes to >= 1.7
+						if(name.equals("_links")) {
+							//TODO: process links
+							continue;
+						}
+						// TODO: Parse hierarchically & remove 'rel' & 'href' as they should only exist within '_links'
+						if (name.equals("href")) {
+							continue;
+						}
+						if (name.equals("rel")) {
+							continue;
+						}
+					}
+					// Not a HAL field, add the token to the token buffer
+					//tokenBuffer.copyCurrentStructure(jp);
+				} while(!(tok == JsonToken.END_OBJECT && graphDepth == 0));
+			} finally {
+				tokenBuffer.close();
+			}
+			
+			JsonParser filteredJp = tokenBuffer.asParser();
+			
 			Object entity = instantiateClass(handledType());
 
 			BeanWrapper<?, Object> wrapper = BeanWrapper.create(entity, conversionService);
-			ResourceMetadata metadata = mappings.getMappingFor(handledType());
 
-			for (JsonToken tok = jp.nextToken(); tok != JsonToken.END_OBJECT; tok = jp.nextToken()) {
-				String name = jp.getCurrentName();
+			for (tok = filteredJp.nextToken(); tok != JsonToken.END_OBJECT; tok = filteredJp.nextToken()) {
+				String name = filteredJp.getCurrentName();
 				switch (tok) {
 					case FIELD_NAME: {
 						if ("href".equals(name)) {
-							URI uri = URI.create(jp.nextTextValue());
+							URI uri = URI.create(filteredJp.nextTextValue());
 							TypeDescriptor entityType = TypeDescriptor.forObject(entity);
 							if (uriDomainClassConverter.matches(URI_TYPE, entityType)) {
 								entity = uriDomainClassConverter.convert(uri, URI_TYPE, entityType);
@@ -161,8 +218,8 @@ public class PersistentEntityJackson2Module extends SimpleModule implements Init
 						Object val = null;
 
 						if ("links".equals(name)) {
-							if ((tok = jp.nextToken()) == JsonToken.START_ARRAY) {
-								while ((tok = jp.nextToken()) != JsonToken.END_ARRAY) {
+							if ((tok = filteredJp.nextToken()) == JsonToken.START_ARRAY) {
+								while ((tok = filteredJp.nextToken()) != JsonToken.END_ARRAY) {
 									// Advance past the links
 								}
 							} else if (tok == JsonToken.VALUE_NULL) {
@@ -187,9 +244,9 @@ public class PersistentEntityJackson2Module extends SimpleModule implements Init
 									.getType();
 							Collection<Object> collection = CollectionFactory.createCollection(collectionType, 0);
 
-							if ((tok = jp.nextToken()) == JsonToken.START_ARRAY) {
-								while ((tok = jp.nextToken()) != JsonToken.END_ARRAY) {
-									Object cval = jp.readValueAs(persistentProperty.getComponentType());
+							if ((tok = filteredJp.nextToken()) == JsonToken.START_ARRAY) {
+								while ((tok = filteredJp.nextToken()) != JsonToken.END_ARRAY) {
+									Object cval = filteredJp.readValueAs(persistentProperty.getComponentType());
 									collection.add(cval);
 								}
 
@@ -204,15 +261,15 @@ public class PersistentEntityJackson2Module extends SimpleModule implements Init
 							Class<? extends Map<?, ?>> mapType = (Class<? extends Map<?, ?>>) persistentProperty.getType();
 							Map<Object, Object> map = CollectionFactory.createMap(mapType, 0);
 
-							if ((tok = jp.nextToken()) == JsonToken.START_OBJECT) {
+							if ((tok = filteredJp.nextToken()) == JsonToken.START_OBJECT) {
 								do {
-									name = jp.getCurrentName();
+									name = filteredJp.getCurrentName();
 									// TODO resolve domain object from URI
-									tok = jp.nextToken();
-									Object mval = jp.readValueAs(persistentProperty.getMapValueType());
+									tok = filteredJp.nextToken();
+									Object mval = filteredJp.readValueAs(persistentProperty.getMapValueType());
 
 									map.put(name, mval);
-								} while ((tok = jp.nextToken()) != JsonToken.END_OBJECT);
+								} while ((tok = filteredJp.nextToken()) != JsonToken.END_OBJECT);
 
 								val = map;
 							} else if (tok == JsonToken.VALUE_NULL) {
@@ -221,8 +278,8 @@ public class PersistentEntityJackson2Module extends SimpleModule implements Init
 								throw new HttpMessageNotReadableException("Cannot read a JSON " + tok + " as a Map.");
 							}
 						} else {
-							if ((tok = jp.nextToken()) != JsonToken.VALUE_NULL) {
-								val = jp.readValueAs(persistentProperty.getType());
+							if ((tok = filteredJp.nextToken()) != JsonToken.VALUE_NULL) {
+								val = filteredJp.readValueAs(persistentProperty.getType());
 							}
 						}
 
@@ -271,27 +328,11 @@ public class PersistentEntityJackson2Module extends SimpleModule implements Init
 			final Map<String, Object> model = new LinkedHashMap<String, Object>();
 
 			try {
+				final Set<String> filteredProperties = new HashSet<String>();
 
-				entity.doWithProperties(new SimplePropertyHandler() {
-
-					/*
-					 * (non-Javadoc)
-					 * @see org.springframework.data.mapping.SimplePropertyHandler#doWithPersistentProperty(org.springframework.data.mapping.PersistentProperty)
-					 */
-					@Override
-					public void doWithPersistentProperty(PersistentProperty<?> property) {
-
-						boolean idAvailableAndShallNotBeExposed = property.isIdProperty()
-								&& !config.isIdExposedFor(entity.getType());
-
-						if (idAvailableAndShallNotBeExposed) {
-							return;
-						}
-
-						// Property is a normal or non-managed property.
-						model.put(property.getName(), wrapper.getProperty(property));
-					}
-				});
+				if(entity.getIdProperty() != null && !config.isIdExposedFor(entity.getType())) {
+					filteredProperties.add(entity.getIdProperty().getName());
+				}
 
 				// Add associations as links
 				entity.doWithAssociations(new SimpleAssociationHandler() {
@@ -306,34 +347,46 @@ public class PersistentEntityJackson2Module extends SimpleModule implements Init
 						PersistentProperty<?> property = association.getInverse();
 
 						if (maybeAddAssociationLink(builder, mappings, property, links)) {
+							// A link was added so don't inline this association
+							filteredProperties.add(property.getName());
 							return;
 						}
-
-						// Association Link was not added, probably because this isn't a managed type. Add value of property inline.
-						if (metadata.isExported(property)) {
-							model.put(property.getName(), wrapper.getProperty(property));
+						
+						if (!metadata.isExported(property)) {
+							filteredProperties.add(property.getName());
 						}
-
 					}
 				});
 
-				MapResource mapResource = new MapResource(model, links);
-				jgen.writeObject(mapResource);
-
+				MapResource mapResource = new MapResource(model, links, obj);
+				
+				// Create a Jackson JSON filter to remove 'filteredProperties' from the JSON output
+				FilterProvider filters = 
+						new SimpleFilterProvider().addFilter(DomainClassIntrospector.ENTITY_JSON_FILTER,
+								SimpleBeanPropertyFilter.serializeAllExcept(filteredProperties));
+				
+				// Output the map resource using the filter and a custom AnnotationIntrospector
+				// used by the objectmapper (see configuration class).
+				// The custom AnnotationInstrospector associates the 'domain class' with the
+				// filter we defined (an alternative to using the @JsonFilter class annotation)
+				createObjectWriter(filters).writeValue(jgen, mapResource);
 			} catch (IllegalStateException e) {
 				throw (IOException) e.getCause();
 			}
 		}
 	}
 
+	protected abstract ObjectWriter createObjectWriter(FilterProvider filterProvider);
+	
 	private static class MapResource extends Resource<Map<String, Object>> {
-
+		
 		/**
 		 * @param content
 		 * @param links
 		 */
-		public MapResource(Map<String, Object> content, Iterable<Link> links) {
+		public MapResource(Map<String, Object> content, Iterable<Link> links, Object obj) {
 			super(content, links);
+			this.setObj(obj);
 		}
 
 		/* 
@@ -349,6 +402,17 @@ public class PersistentEntityJackson2Module extends SimpleModule implements Init
 		@JsonAnyGetter
 		public Map<String, Object> any() {
 			return getContent();
+		}
+
+		@com.fasterxml.jackson.annotation.JsonUnwrapped		
+		private Object obj;
+		
+		public Object getObj() {
+			return obj;
+		}
+
+		public void setObj(Object obj) {
+			this.obj = obj;
 		}
 	}
 }

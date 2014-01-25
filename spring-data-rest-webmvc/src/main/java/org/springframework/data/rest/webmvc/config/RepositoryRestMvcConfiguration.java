@@ -20,6 +20,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.commons.collections.IteratorUtils;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -54,6 +55,7 @@ import org.springframework.data.rest.webmvc.RepositoryRestRequestHandlerMethodAr
 import org.springframework.data.rest.webmvc.ResourceMetadataHandlerMethodArgumentResolver;
 import org.springframework.data.rest.webmvc.ServerHttpRequestMethodArgumentResolver;
 import org.springframework.data.rest.webmvc.convert.UriListHttpMessageConverter;
+import org.springframework.data.rest.webmvc.json.DomainClassIntrospector;
 import org.springframework.data.rest.webmvc.json.Jackson2DatatypeHelper;
 import org.springframework.data.rest.webmvc.json.PersistentEntityJackson2Module;
 import org.springframework.data.rest.webmvc.json.PersistentEntityToJsonSchemaConverter;
@@ -83,7 +85,9 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
 
 import com.fasterxml.jackson.databind.Module;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.ser.FilterProvider;
 
 /**
  * Main application configuration for Spring Data REST. To customize how the exporter works, subclass this and override
@@ -347,13 +351,20 @@ public class RepositoryRestMvcConfiguration extends HateoasAwareSpringDataWebCon
 		return converter;
 	}
 
+	@SuppressWarnings("unchecked")
 	@Bean
+	public DomainClassIntrospector domainClassIntrospector() {
+		return new DomainClassIntrospector(IteratorUtils.toList(repositories().iterator()));
+	}
+	
+	@Bean 
 	public ObjectMapper halObjectMapper() {
 
 		HalHandlerInstantiator instantiator = new HalHandlerInstantiator(getDefaultedRelProvider(), curieProvider);
 
 		ObjectMapper mapper = basicObjectMapper();
 		mapper.registerModule(new Jackson2HalModule());
+		mapper.setAnnotationIntrospector(domainClassIntrospector());
 		mapper.setHandlerInstantiator(instantiator);
 
 		return mapper;
@@ -425,7 +436,13 @@ public class RepositoryRestMvcConfiguration extends HateoasAwareSpringDataWebCon
 	 */
 	@Bean
 	public Module persistentEntityJackson2Module() {
-		return new PersistentEntityJackson2Module(resourceMappings(), defaultConversionService());
+		return new PersistentEntityJackson2Module(resourceMappings(), defaultConversionService()) {
+			private static final long serialVersionUID = 3909586849991553446L;
+
+			protected ObjectWriter createObjectWriter(FilterProvider filterProvider) {
+				return halObjectMapper().writer(filterProvider);
+			}
+		};
 	}
 
 	/**

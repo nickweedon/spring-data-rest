@@ -22,6 +22,8 @@ import org.springframework.hateoas.hal.Jackson2HalModule;
 
 import com.fasterxml.jackson.databind.Module;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
+import com.fasterxml.jackson.databind.ser.FilterProvider;
 
 /**
  * @author Jon Brisbin
@@ -74,8 +76,15 @@ public class RepositoryTestsConfig {
 
 	@Bean
 	public Module persistentEntityModule() {
-		return new PersistentEntityJackson2Module(new ResourceMappings(config(), repositories()),
-				defaultConversionService());
+
+		return new PersistentEntityJackson2Module(new ResourceMappings(config(), repositories()), defaultConversionService()) {
+
+			private static final long serialVersionUID = -8664444929058952344L;
+
+			protected ObjectWriter createObjectWriter(FilterProvider filterProvider) {
+				return objectMapper().writer(filterProvider);
+			}
+		};
 	}
 
 	@Bean
