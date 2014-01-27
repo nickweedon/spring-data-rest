@@ -61,6 +61,7 @@ public class TestDataPopulator {
 		Person person = people.findAll().iterator().next();
 
 		Order order = new Order(person);
+		order.setOrderName("Billy bob's chipies");
 		order.add(new LineItem("Java Chip"));
 		orders.save(order);
 	}

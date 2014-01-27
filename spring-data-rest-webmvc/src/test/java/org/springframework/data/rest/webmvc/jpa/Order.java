@@ -27,6 +27,8 @@ import javax.persistence.ManyToOne;
 import javax.persistence.OneToMany;
 import javax.persistence.Table;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * @author Oliver Gierke
  */
@@ -43,6 +45,16 @@ public class Order {
 
 	public Order(Person creator) {
 		this.creator = creator;
+	}
+	
+	@JsonProperty("penguin")
+	private String orderName;
+	public String getOrderName() {
+		return orderName;
+	}
+
+	public void setOrderName(String orderName) {
+		this.orderName = orderName;
 	}
 
 	protected Order() {

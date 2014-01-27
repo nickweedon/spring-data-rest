@@ -1,6 +1,8 @@
-{ "creator" : {
-    "href" : "http://localhost:8080/persons/1"
+{ 
+  "_links" : {
+    "creator" : { "href" : "http://localhost:8080/persons/1" }
   },
+  "penguin" : "crazy order of penguin",
   "lineItems" : [ 
   	{ "name" : "Java Chip" },
   	{ "name" : "Chocolate Mocca " } ]

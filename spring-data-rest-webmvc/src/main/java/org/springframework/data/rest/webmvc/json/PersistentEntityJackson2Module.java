@@ -6,12 +6,14 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.commons.lang.builder.ReflectionToStringBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
@@ -19,6 +21,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.CollectionFactory;
 import org.springframework.core.convert.ConversionService;
 import org.springframework.core.convert.TypeDescriptor;
+import org.springframework.core.convert.converter.GenericConverter.ConvertiblePair;
 import org.springframework.data.mapping.Association;
 import org.springframework.data.mapping.PersistentEntity;
 import org.springframework.data.mapping.PersistentProperty;
@@ -31,6 +34,9 @@ import org.springframework.data.rest.core.mapping.ResourceMapping;
 import org.springframework.data.rest.core.mapping.ResourceMappings;
 import org.springframework.data.rest.core.mapping.ResourceMetadata;
 import org.springframework.data.rest.webmvc.PersistentEntityResource;
+import org.springframework.data.rest.webmvc.jpa.LineItem;
+import org.springframework.data.rest.webmvc.jpa.Order;
+import org.springframework.data.rest.webmvc.jpa.Person;
 import org.springframework.data.rest.webmvc.support.RepositoryLinkBuilder;
 import org.springframework.hateoas.Link;
 import org.springframework.hateoas.Resource;
@@ -41,11 +47,13 @@ import com.fasterxml.jackson.annotation.JsonAnyGetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.Version;
 import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
@@ -121,7 +129,7 @@ public abstract class PersistentEntityJackson2Module extends SimpleModule implem
 					LOG.warn("The domain class {} does not have PersistentEntity metadata.", domainType.getName());
 				}
 			} else {
-				addDeserializer(domainType, new ResourceDeserializer(pe));
+				addDeserializer(domainType, new ResourceDeserializer(pe, mappings.getMappingFor(domainType)));
 				registeredDeserializerDomainClasses.add(domainType);
 			}
 		}
@@ -131,164 +139,247 @@ public abstract class PersistentEntityJackson2Module extends SimpleModule implem
 
 		private static final long serialVersionUID = 8195592798684027681L;
 		private final PersistentEntity<?, ?> persistentEntity;
+		private final Map<String, TypeDescriptor> exportedAssociationTypeMap;
 
-		private ResourceDeserializer(final PersistentEntity<?, ?> persistentEntity) {
+		private ResourceDeserializer(final PersistentEntity<?, ?> persistentEntity, final ResourceMetadata metadata) {
 			super(persistentEntity.getType());
 			this.persistentEntity = persistentEntity;
+			this.exportedAssociationTypeMap = new HashMap<String, TypeDescriptor>();
+
+			// Build the exported association map
+			persistentEntity.doWithAssociations(new SimpleAssociationHandler() {
+
+				/*
+				 * (non-Javadoc)
+				 * @see org.springframework.data.mapping.SimpleAssociationHandler#doWithAssociation(org.springframework.data.mapping.Association)
+				 */
+				@Override
+				public void doWithAssociation(Association<? extends PersistentProperty<?>> association) {
+
+					PersistentProperty<?> property = association.getInverse();
+					
+					if (metadata.isExported(property)) {
+						exportedAssociationTypeMap.put(property.getName(), TypeDescriptor.valueOf(property.getType()));
+					}
+				}
+			});
+		}
+		
+		private String getErrorMsgPrefix(JsonParser jp) {
+			int JsonLineNo = jp.getCurrentLocation().getLineNr();
+			return "While parsing JSON document at line " + JsonLineNo + ": ";
+		}
+		
+		private void logDebug(int depth, String msg) {
+			if(LOG.isWarnEnabled()) {
+				StringBuilder fullMsg = new StringBuilder();
+				for(int i = 1; i < depth; i++) {
+					fullMsg.append("\t");
+				}
+				fullMsg.append(msg);
+				LOG.warn(fullMsg.toString());
+			}
+		}
+		
+		private void processLinksObject(JsonParser jp, TokenBuffer domainObjectBuffer, Set<String> processedFields, int depth) throws JsonParseException, IOException {
+			// Inside _links object
+
+			JsonToken token = jp.nextToken();
+			depth++;
+
+			// For each link field
+			do {
+				if(token != JsonToken.FIELD_NAME) {
+					throw new HttpMessageNotReadableException(getErrorMsgPrefix(jp) 
+							+ "Expected field but encountered json token type '" + token.toString() + "'.");					
+				}
+				String linkName = jp.getCurrentName();
+
+				if(processedFields.contains(linkName)) {
+					throw new HttpMessageNotReadableException(getErrorMsgPrefix(jp) 
+						+ "Encountered link field '" + linkName + " more than once in the same object."
+						+ "Note that a relation field may not appear inline if it is contained in the '_links' section of that object.");
+				}
+				
+				if(token == JsonToken.FIELD_NAME && linkName.equals("_links")) {
+					throw new HttpMessageNotReadableException(getErrorMsgPrefix(jp) 
+							+ "Encountered '_links' property while already inside a '_links' object.");
+				}
+				
+				// Process the link field's value, could be either a single object or an array
+				token = jp.nextToken();
+				boolean isArray = false;
+				switch(token) {
+					case START_OBJECT:
+						break;
+					case START_ARRAY:
+						isArray = true;
+						//domainObjectBuffer.copyCurrentEvent(jp);
+						// Consume the next token so we are in a state that is consistent
+						// with that of processing a single link value.
+						token = jp.nextToken();
+						break;
+					default:
+						throw new HttpMessageNotReadableException(getErrorMsgPrefix(jp) 
+								+ "Expected link property to be of 'object' or 'array' type.");
+				}
+				
+				// Continue to process the value(s) of the link until we reach:
+				// END_OBJECT (for an object) or END_ARRAY (for an array)
+				boolean moreLinkValues = true;
+				while(moreLinkValues) {
+					token = jp.nextToken();
+					switch(token) {
+						case FIELD_NAME:
+							if(!jp.getCurrentName().equals("href")) {
+
+								// We only understand 'href' at the moment so ignore
+								// TODO: log a warning if logging is enabled
+								token = jp.nextToken();
+								continue;
+							}
+							//token = jp.nextToken();
+							String uriString = jp.nextTextValue();
+							
+							TypeDescriptor associationType = exportedAssociationTypeMap.get(linkName);
+
+							// If we have an exported association mapping for this type
+							if(associationType != null) {
+								
+								URI uri = URI.create(uriString);
+								Object linkObject = uriDomainClassConverter.convert(uri, URI_TYPE, associationType);
+								
+								// Add the created association object to the Json buffer representing 
+								// the transformed domain object
+								domainObjectBuffer.writeObjectField(linkName, linkObject);
+								logDebug(depth, "new '" + linkName + "' <-- '" + uriString + "'");
+							} else {
+								throw new HttpMessageNotReadableException(getErrorMsgPrefix(jp) 
+										+ "Could not create association mapping for uri '" + uriString 
+										+ "' as there is no exported assocation for this type.");
+							}
+							break;
+						case END_OBJECT:
+							if(!isArray) {
+								moreLinkValues = false;
+							}
+							break;
+						case END_ARRAY:
+							if(!isArray) {
+								throw new HttpMessageNotReadableException(getErrorMsgPrefix(jp) 
+										+ "Expected end of array but encountered end of object.");
+							} 
+							//domainObjectBuffer.copyCurrentEvent(jp);
+							moreLinkValues = false;
+							break;
+						case START_OBJECT:
+							if(!isArray) {
+								throw new HttpMessageNotReadableException(getErrorMsgPrefix(jp) 
+										+ "Encountered more than one object in a non-array type '_links' object.");
+							} 
+							break;
+						default:
+							throw new HttpMessageNotReadableException(getErrorMsgPrefix(jp) 
+									+ "Expected field or end of object/array.");
+					}
+				}
+				// Read the next link field
+				token = jp.nextToken();
+			} while(token != JsonToken.END_OBJECT);
+		}
+		
+		public void parseJsonObject(JsonParser jp, TokenBuffer domainObjectBuffer, int depth) throws JsonParseException, IOException {
+			Set<String> processedFields = new HashSet<String>();
+			JsonToken token = jp.getCurrentToken();
+
+			String name = jp.getCurrentName();
+
+			logDebug(depth, name + ": " + token.toString());
+			
+			domainObjectBuffer.copyCurrentEvent(jp);
+
+			depth++;
+
+			do {
+				token = jp.nextToken();
+				name = jp.getCurrentName();
+
+				if(token == JsonToken.START_OBJECT) {
+					parseJsonObject(jp, domainObjectBuffer, depth);
+					continue;
+				}
+
+				if(token == JsonToken.END_ARRAY || token == JsonToken.END_OBJECT) {
+					depth--;
+				}
+				
+				if(token == JsonToken.FIELD_NAME) {
+					if(processedFields.contains(name)) {
+						throw new HttpMessageNotReadableException(getErrorMsgPrefix(jp) 
+							+ "Encountered field '" + name + " more than once in the same object."
+							+ "Note that a relation field may not appear inline if it is contained in the '_links' section of that object.");
+					}
+					processedFields.add(name);
+					
+					if(name.equals("_links")) {
+						logDebug(depth, "<Processing a '_links' section>");
+						token = jp.nextToken();
+						if(token != JsonToken.START_OBJECT) {
+							throw new HttpMessageNotReadableException(getErrorMsgPrefix(jp) 
+									+ "Expected '_links' to be of type object.");
+						}
+						processLinksObject(jp, domainObjectBuffer, processedFields, depth);
+						continue;
+					}
+				}
+
+				logDebug(depth, name + ": " + token.toString());
+
+				if(token == JsonToken.START_ARRAY) {
+					depth++;
+				}
+
+				domainObjectBuffer.copyCurrentEvent(jp);
+			}
+			while(token != JsonToken.END_OBJECT); 
 		}
 
 		@SuppressWarnings({ "unchecked", "incomplete-switch", "unused" })
 		@Override
 		public T deserialize(JsonParser jp, DeserializationContext ctxt) throws IOException, JsonProcessingException {
 
-			TokenBuffer tokenBuffer = new TokenBuffer(jp);
+			TokenBuffer domainObjectBuffer = new TokenBuffer(jp);
+			
+			//DomainObjectBuilder domainObjectBuilder = new DomainObjectBuilder(jp);
+			
 			JsonToken tok = null;
 			
-			int graphDepth = 1;
-			
 			try {
-				do {
-					tok = jp.nextToken();
-					String name = jp.getCurrentName();
-
-					if(tok == JsonToken.END_ARRAY || tok == JsonToken.END_OBJECT) {
-						--graphDepth;
-					}
-
-					for(int i = 1; i < graphDepth; i++) {
-						System.out.print("\t");
-					}
-					System.out.println(name + ": " + tok.toString());
-					
-					if(tok == JsonToken.START_ARRAY || tok == JsonToken.START_OBJECT) {
-						++graphDepth;
-					}
-					// Until proper unit tested support is added, just remove all HAL fields
-					if(tok == JsonToken.FIELD_NAME ) {
-						// TODO: update me to a 'switch(name)' statement when JDK compatibility changes to >= 1.7
-						if(name.equals("_links")) {
-							//TODO: process links
-							continue;
-						}
-						// TODO: Parse hierarchically & remove 'rel' & 'href' as they should only exist within '_links'
-						if (name.equals("href")) {
-							continue;
-						}
-						if (name.equals("rel")) {
-							continue;
-						}
-					}
-					// Not a HAL field, add the token to the token buffer
-					//tokenBuffer.copyCurrentStructure(jp);
-				} while(!(tok == JsonToken.END_OBJECT && graphDepth == 0));
-			} finally {
-				tokenBuffer.close();
+				logDebug(0, "Transforming HAL Json Object into regular inlined REST object: ");
+				parseJsonObject(jp, domainObjectBuffer, 1);
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
 			
-			JsonParser filteredJp = tokenBuffer.asParser();
+			ObjectMapper objectMapper = new ObjectMapper();
+			JsonParser filteredJp = domainObjectBuffer.asParser();
+
+			//Object entity = objectMapper.readValue(filteredJp, handledType());
+
+			Order order = (Order) objectMapper.readValue(filteredJp, handledType());
+			Object entity = order;
+
 			
-			Object entity = instantiateClass(handledType());
-
-			BeanWrapper<?, Object> wrapper = BeanWrapper.create(entity, conversionService);
-
-			for (tok = filteredJp.nextToken(); tok != JsonToken.END_OBJECT; tok = filteredJp.nextToken()) {
-				String name = filteredJp.getCurrentName();
-				switch (tok) {
-					case FIELD_NAME: {
-						if ("href".equals(name)) {
-							URI uri = URI.create(filteredJp.nextTextValue());
-							TypeDescriptor entityType = TypeDescriptor.forObject(entity);
-							if (uriDomainClassConverter.matches(URI_TYPE, entityType)) {
-								entity = uriDomainClassConverter.convert(uri, URI_TYPE, entityType);
-							}
-
-							continue;
-						}
-
-						if ("rel".equals(name)) {
-							// rel is currently ignored
-							continue;
-						}
-
-						PersistentProperty<?> persistentProperty = persistentEntity.getPersistentProperty(name);
-						if (null == persistentProperty) {
-							continue;
-						}
-
-						Object val = null;
-
-						if ("links".equals(name)) {
-							if ((tok = filteredJp.nextToken()) == JsonToken.START_ARRAY) {
-								while ((tok = filteredJp.nextToken()) != JsonToken.END_ARRAY) {
-									// Advance past the links
-								}
-							} else if (tok == JsonToken.VALUE_NULL) {
-								// skip null value
-							} else {
-								throw new HttpMessageNotReadableException(
-										"Property 'links' is not of array type. Either eliminate this property from the document or make it an array.");
-							}
-							continue;
-						}
-
-						if (null == persistentProperty) {
-							// do nothing
-							continue;
-						}
-
-						// Try and read the value of this attribute.
-						// The method of doing that varies based on the type of the property.
-						if (persistentProperty.isCollectionLike()) {
-
-							Class<? extends Collection<?>> collectionType = (Class<? extends Collection<?>>) persistentProperty
-									.getType();
-							Collection<Object> collection = CollectionFactory.createCollection(collectionType, 0);
-
-							if ((tok = filteredJp.nextToken()) == JsonToken.START_ARRAY) {
-								while ((tok = filteredJp.nextToken()) != JsonToken.END_ARRAY) {
-									Object cval = filteredJp.readValueAs(persistentProperty.getComponentType());
-									collection.add(cval);
-								}
-
-								val = collection;
-							} else if (tok == JsonToken.VALUE_NULL) {
-								val = null;
-							} else {
-								throw new HttpMessageNotReadableException("Cannot read a JSON " + tok + " as a Collection.");
-							}
-						} else if (persistentProperty.isMap()) {
-
-							Class<? extends Map<?, ?>> mapType = (Class<? extends Map<?, ?>>) persistentProperty.getType();
-							Map<Object, Object> map = CollectionFactory.createMap(mapType, 0);
-
-							if ((tok = filteredJp.nextToken()) == JsonToken.START_OBJECT) {
-								do {
-									name = filteredJp.getCurrentName();
-									// TODO resolve domain object from URI
-									tok = filteredJp.nextToken();
-									Object mval = filteredJp.readValueAs(persistentProperty.getMapValueType());
-
-									map.put(name, mval);
-								} while ((tok = filteredJp.nextToken()) != JsonToken.END_OBJECT);
-
-								val = map;
-							} else if (tok == JsonToken.VALUE_NULL) {
-								val = null;
-							} else {
-								throw new HttpMessageNotReadableException("Cannot read a JSON " + tok + " as a Map.");
-							}
-						} else {
-							if ((tok = filteredJp.nextToken()) != JsonToken.VALUE_NULL) {
-								val = filteredJp.readValueAs(persistentProperty.getType());
-							}
-						}
-
-						wrapper.setProperty(persistentProperty, val, false);
-
-						break;
-					}
-				}
+			System.out.println("============ Domain Object ============");
+			System.out.println("Order name: " + order.getOrderName());
+			for(LineItem lineItem : order.getLineItems()) {
+				System.out.println("Name: " + lineItem.getName());
 			}
+			Person creator = order.getCreator();
+			System.out.println("Creator: " + creator.getFirstName() + " " + creator.getLastName());
+			
+			//System.out.println(ReflectionToStringBuilder.toString(domainObject));
+			
 
 			return (T) entity;
 		}
