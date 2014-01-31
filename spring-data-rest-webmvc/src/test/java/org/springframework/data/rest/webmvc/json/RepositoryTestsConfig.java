@@ -3,6 +3,7 @@ package org.springframework.data.rest.webmvc.json;
 import java.net.URI;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -69,7 +70,7 @@ public class RepositoryTestsConfig {
 		return new DomainClassConverter<DefaultFormattingConversionService>(defaultConversionService());
 	}
 
-	@Bean
+	@Bean @Qualifier("UriDomainClass")
 	public UriDomainClassConverter uriDomainClassConverter() {
 		return new UriDomainClassConverter(repositories(), domainClassConverter());
 	}

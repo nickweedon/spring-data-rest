@@ -20,7 +20,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.commons.collections.IteratorUtils;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -89,7 +88,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.ser.FilterProvider;
-import com.sun.org.omg.CORBA.Repository;
 
 /**
  * Main application configuration for Spring Data REST. To customize how the exporter works, subclass this and override
@@ -150,7 +148,7 @@ public class RepositoryRestMvcConfiguration extends HateoasAwareSpringDataWebCon
 		return new DomainClassConverter<DefaultFormattingConversionService>(defaultConversionService());
 	}
 
-	@Bean
+	@Bean @Qualifier("UriDomainClass")
 	public UriDomainClassConverter uriDomainClassConverter() {
 		return new UriDomainClassConverter(repositories(), domainClassConverter());
 	}

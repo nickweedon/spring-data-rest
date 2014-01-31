@@ -11,13 +11,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.convert.TypeDescriptor;
+import org.springframework.core.convert.converter.ConditionalGenericConverter;
 import org.springframework.data.mapping.Association;
 import org.springframework.data.mapping.PersistentEntity;
 import org.springframework.data.mapping.PersistentProperty;
 import org.springframework.data.mapping.SimpleAssociationHandler;
 import org.springframework.data.repository.support.Repositories;
-import org.springframework.data.rest.core.UriDomainClassConverter;
 import org.springframework.data.rest.core.mapping.ResourceMappings;
 import org.springframework.data.rest.core.mapping.ResourceMetadata;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -31,7 +32,9 @@ public class HalToJsonConverter implements InitializingBean {
 
 	private final Map<String, TypeDescriptor> exportedAssociationTypeMap = new HashMap<String, TypeDescriptor>();
 	@Autowired private ResourceMappings mappings;
-	@Autowired private UriDomainClassConverter uriDomainClassConverter;
+	@Autowired
+	@Qualifier("UriDomainClass")
+	private ConditionalGenericConverter uriDomainClassConverter;
 	@Autowired private Repositories repositories;
 	
 	private static final TypeDescriptor URI_TYPE = TypeDescriptor.valueOf(URI.class);

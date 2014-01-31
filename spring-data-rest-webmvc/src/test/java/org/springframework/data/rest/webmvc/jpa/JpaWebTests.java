@@ -212,18 +212,6 @@ public class JpaWebTests extends AbstractWebIntegrationTests {
 	public void createsOrderWithInlineCreatorUsingPut() throws Exception {
 		final long ORDER_ID = 4711;
 
-		System.out.println("=================================================");
-		System.out.println("=================================================");
-		/*
-		for(Person person : personRepo.findAll()) {
-			System.out.println(person.getId() + " - " + person.getFirstName() + " " + person.getLastName());
-		}*/
-		for(Order daOrda : orderRepo.findAll()) {
-			System.out.println(daOrda.getId() + " - " + daOrda.getOrderName());
-		}
-		System.out.println("=================================================");
-		System.out.println("=================================================");
-		
 		mvc.perform(//
 				put("/orders/{id}", ORDER_ID).//
 						content(readFile("orderInlineCreator.json")).contentType(MediaType.APPLICATION_JSON)//
