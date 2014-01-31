@@ -14,6 +14,7 @@ import javax.persistence.ManyToOne;
 import javax.persistence.PrePersist;
 import javax.validation.constraints.NotNull;
 
+import org.hibernate.annotations.GenericGenerator;
 import org.springframework.data.rest.core.annotation.Description;
 
 /**
@@ -39,7 +40,9 @@ public class Person {
 	}
 
 	@Id
-	@GeneratedValue
+	@GeneratedValue(generator = "TransactionalIDGenerator")
+	@GenericGenerator(name = "TransactionalIDGenerator",
+	        strategy = "org.springframework.data.rest.webmvc.jpa.TransactionalIDGenerator")		
 	public Long getId() {
 		return id;
 	}

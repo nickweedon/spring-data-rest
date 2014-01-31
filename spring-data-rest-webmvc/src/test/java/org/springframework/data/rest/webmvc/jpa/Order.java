@@ -27,6 +27,8 @@ import javax.persistence.ManyToOne;
 import javax.persistence.OneToMany;
 import javax.persistence.Table;
 
+import org.hibernate.annotations.GenericGenerator;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
@@ -36,9 +38,12 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 @Table(name = "ORDERS")
 public class Order {
 
-	@Id @GeneratedValue//
+	@Id 
+	@GeneratedValue(generator = "TransactionalIDGenerator")
+	@GenericGenerator(name = "TransactionalIDGenerator",
+	        strategy = "org.springframework.data.rest.webmvc.jpa.TransactionalIDGenerator")		
 	private Long id;
-	@ManyToOne(fetch = FetchType.LAZY)//
+	@ManyToOne(cascade = CascadeType.MERGE, fetch = FetchType.LAZY)//
 	private Person creator;
 	@OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)//
 	private Set<LineItem> lineItems = new HashSet<LineItem>();
@@ -47,12 +52,15 @@ public class Order {
 		this.creator = creator;
 	}
 	
-	@JsonProperty("penguin")
 	private String orderName;
 	public String getOrderName() {
 		return orderName;
 	}
 
+	public void setId(Long id) {
+		this.id = id;
+	}
+	
 	public void setOrderName(String orderName) {
 		this.orderName = orderName;
 	}

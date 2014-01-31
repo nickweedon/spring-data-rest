@@ -1,6 +1,10 @@
 package org.springframework.data.rest.webmvc.jpa;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Deque;
+import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -60,10 +64,17 @@ public class TestDataPopulator {
 
 		Person person = people.findAll().iterator().next();
 
-		Order order = new Order(person);
-		order.setOrderName("Billy bob's chipies");
-		order.add(new LineItem("Java Chip"));
-		orders.save(order);
+		Deque<Order> orderList = new ArrayDeque<Order>();
+		
+		orderList.add(new Order(person));
+		orderList.getLast().setOrderName("Billy bob's chipies");
+		orderList.getLast().add(new LineItem("Java Chip"));
+
+		orderList.add(new Order(person));
+		orderList.getLast().setOrderName("Jane's makeup obsession");
+		orderList.getLast().add(new LineItem("Black super tart eyeliner"));
+		
+		orders.save(orderList);
 	}
 
 	private void populatePeople() {

@@ -36,7 +36,11 @@ import org.springframework.data.rest.webmvc.AbstractWebIntegrationTests;
 import org.springframework.hateoas.Link;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.transaction.TransactionConfiguration;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -52,8 +56,8 @@ import com.jayway.jsonpath.JsonPath;
  * @author Oliver Gierke
  * @author Greg Turnquist
  */
-@Transactional
 @ContextConfiguration(classes = JpaRepositoryConfig.class)
+@Transactional
 public class JpaWebTests extends AbstractWebIntegrationTests {
 
 	private static final MediaType TEXT_URI_LIST = MediaType.valueOf("text/uri-list");
@@ -62,6 +66,9 @@ public class JpaWebTests extends AbstractWebIntegrationTests {
 	@Autowired TestDataPopulator loader;
 	@Autowired ResourceMappings mappings;
 
+	@Autowired OrderRepository orderRepo;
+	@Autowired PersonRepository personRepo;
+	
 	/* 
 	 * (non-Javadoc)
 	 * @see org.springframework.data.rest.webmvc.AbstractWebIntegrationTests#setUp()
@@ -167,12 +174,71 @@ public class JpaWebTests extends AbstractWebIntegrationTests {
 	 */
 	@Test
 	public void createsOrderUsingPut() throws Exception {
+		final long ORDER_ID = 4711;
 
+		System.out.println("=================================================");
+		System.out.println("=================================================");
+		/*
+		for(Person person : personRepo.findAll()) {
+			System.out.println(person.getId() + " - " + person.getFirstName() + " " + person.getLastName());
+		}*/
+		for(Order daOrda : orderRepo.findAll()) {
+			System.out.println(daOrda.getId() + " - " + daOrda.getOrderName());
+		}
+		System.out.println("=================================================");
+		System.out.println("=================================================");
+		
 		mvc.perform(//
-				put("/orders/{id}", 4711).//
+				put("/orders/{id}", ORDER_ID).//
 						content(readFile("order.json")).contentType(MediaType.APPLICATION_JSON)//
 		).andExpect(status().isCreated());
+
+		// Assert that the ID was set
+		Order order = orderRepo.findOne(ORDER_ID);
+		assertThat(order, is(notNullValue()));
+		assertEquals("Billy's crazy food order", order.getOrderName());
+		
+		
+		// Assert that the 'creator' was set via the '_links' section of the Json request
+		assertThat(order.getCreator(), is(notNullValue()));
+		assertEquals("Billy Bob", order.getCreator().getFirstName());
+		assertEquals("Thornton", order.getCreator().getLastName());
 	}
+	
+	/**
+	 * 
+	 */
+	@Test
+	public void createsOrderWithInlineCreatorUsingPut() throws Exception {
+		final long ORDER_ID = 4711;
+
+		System.out.println("=================================================");
+		System.out.println("=================================================");
+		/*
+		for(Person person : personRepo.findAll()) {
+			System.out.println(person.getId() + " - " + person.getFirstName() + " " + person.getLastName());
+		}*/
+		for(Order daOrda : orderRepo.findAll()) {
+			System.out.println(daOrda.getId() + " - " + daOrda.getOrderName());
+		}
+		System.out.println("=================================================");
+		System.out.println("=================================================");
+		
+		mvc.perform(//
+				put("/orders/{id}", ORDER_ID).//
+						content(readFile("orderInlineCreator.json")).contentType(MediaType.APPLICATION_JSON)//
+		).andExpect(status().isCreated());
+
+		// Assert that the ID was set
+		Order order = orderRepo.findOne(ORDER_ID);
+		assertThat(order, is(notNullValue()));
+		assertEquals("Mr Burn's order", order.getOrderName());
+		
+		// Assert that the 'creator' was created inline
+		assertThat(order.getCreator(), is(notNullValue()));
+		assertEquals("Montgomery", order.getCreator().getFirstName());
+		assertEquals("Burns", order.getCreator().getLastName());
+	}	
 
 	@Test
 	public void listsSiblingsWithContentCorrectly() throws Exception {

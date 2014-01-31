@@ -364,8 +364,9 @@ public abstract class PersistentEntityJackson2Module extends SimpleModule implem
 			ObjectMapper objectMapper = new ObjectMapper();
 			JsonParser filteredJp = domainObjectBuffer.asParser();
 
-			//Object entity = objectMapper.readValue(filteredJp, handledType());
+			Object entity = objectMapper.readValue(filteredJp, handledType());
 
+			/*
 			Order order = (Order) objectMapper.readValue(filteredJp, handledType());
 			Object entity = order;
 
@@ -377,6 +378,7 @@ public abstract class PersistentEntityJackson2Module extends SimpleModule implem
 			}
 			Person creator = order.getCreator();
 			System.out.println("Creator: " + creator.getFirstName() + " " + creator.getLastName());
+			*/
 			
 			//System.out.println(ReflectionToStringBuilder.toString(domainObject));
 			
