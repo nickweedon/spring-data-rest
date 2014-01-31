@@ -77,7 +77,7 @@ public class RepositoryTestsConfig {
 	@Bean
 	public Module persistentEntityModule() {
 
-		return new PersistentEntityJackson2Module(new ResourceMappings(config(), repositories()), defaultConversionService()) {
+		return new PersistentEntityJackson2Module(resourceMappings()) {
 
 			private static final long serialVersionUID = -8664444929058952344L;
 
@@ -98,5 +98,15 @@ public class RepositoryTestsConfig {
 		mapper.setHandlerInstantiator(new Jackson2HalModule.HalHandlerInstantiator(relProvider, null));
 
 		return mapper;
+	}
+	
+	@Bean
+	public HalToJsonConverter halToJsonConverter() {
+		return new HalToJsonConverter();
+	}
+	
+	@Bean
+	public ResourceMappings resourceMappings() {
+		return new ResourceMappings(config(), repositories());		
 	}
 }

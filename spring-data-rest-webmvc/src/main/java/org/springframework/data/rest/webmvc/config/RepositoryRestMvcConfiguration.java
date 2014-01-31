@@ -56,6 +56,7 @@ import org.springframework.data.rest.webmvc.ResourceMetadataHandlerMethodArgumen
 import org.springframework.data.rest.webmvc.ServerHttpRequestMethodArgumentResolver;
 import org.springframework.data.rest.webmvc.convert.UriListHttpMessageConverter;
 import org.springframework.data.rest.webmvc.json.DomainClassIntrospector;
+import org.springframework.data.rest.webmvc.json.HalToJsonConverter;
 import org.springframework.data.rest.webmvc.json.Jackson2DatatypeHelper;
 import org.springframework.data.rest.webmvc.json.PersistentEntityJackson2Module;
 import org.springframework.data.rest.webmvc.json.PersistentEntityToJsonSchemaConverter;
@@ -436,13 +437,18 @@ public class RepositoryRestMvcConfiguration extends HateoasAwareSpringDataWebCon
 	 */
 	@Bean
 	public Module persistentEntityJackson2Module() {
-		return new PersistentEntityJackson2Module(resourceMappings(), defaultConversionService()) {
+		return new PersistentEntityJackson2Module(resourceMappings()) {
 			private static final long serialVersionUID = 3909586849991553446L;
 
 			protected ObjectWriter createObjectWriter(FilterProvider filterProvider) {
 				return halObjectMapper().writer(filterProvider);
 			}
 		};
+	}
+	
+	@Bean
+	public HalToJsonConverter halToJsonConverter() {
+		return new HalToJsonConverter();
 	}
 
 	/**
