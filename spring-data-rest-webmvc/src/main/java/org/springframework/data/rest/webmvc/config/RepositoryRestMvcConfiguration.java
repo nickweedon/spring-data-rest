@@ -89,6 +89,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.ser.FilterProvider;
+import com.sun.org.omg.CORBA.Repository;
 
 /**
  * Main application configuration for Spring Data REST. To customize how the exporter works, subclass this and override
@@ -352,10 +353,15 @@ public class RepositoryRestMvcConfiguration extends HateoasAwareSpringDataWebCon
 		return converter;
 	}
 
-	@SuppressWarnings("unchecked")
 	@Bean
 	public DomainClassIntrospector domainClassIntrospector() {
-		return new DomainClassIntrospector(IteratorUtils.toList(repositories().iterator()));
+		// IteratorUtils would be good here
+		List<Class<?>> repositoryList = new ArrayList<Class<?>>();
+		Repositories repositories = repositories();
+		for(Class<?> domainClass : repositories) {
+			repositoryList.add(domainClass);
+		}
+		return new DomainClassIntrospector(repositoryList);
 	}
 	
 	@Bean 
