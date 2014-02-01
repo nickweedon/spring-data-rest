@@ -1,6 +1,8 @@
 package org.springframework.data.rest.webmvc.json;
 
 import java.net.URI;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -8,6 +10,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.core.convert.TypeDescriptor;
 import org.springframework.data.repository.support.DomainClassConverter;
 import org.springframework.data.repository.support.Repositories;
 import org.springframework.data.rest.core.UriDomainClassConverter;
@@ -70,7 +73,7 @@ public class RepositoryTestsConfig {
 		return new DomainClassConverter<DefaultFormattingConversionService>(defaultConversionService());
 	}
 
-	@Bean @Qualifier("UriDomainClass")
+	@Bean
 	public UriDomainClassConverter uriDomainClassConverter() {
 		return new UriDomainClassConverter(repositories(), domainClassConverter());
 	}
@@ -82,8 +85,8 @@ public class RepositoryTestsConfig {
 
 			private static final long serialVersionUID = -8664444929058952344L;
 
-			protected ObjectWriter createObjectWriter(FilterProvider filterProvider) {
-				return objectMapper().writer(filterProvider);
+			protected ObjectMapper getObjectMapper() {
+				return objectMapper();
 			}
 		};
 	}
@@ -99,11 +102,6 @@ public class RepositoryTestsConfig {
 		mapper.setHandlerInstantiator(new Jackson2HalModule.HalHandlerInstantiator(relProvider, null));
 
 		return mapper;
-	}
-	
-	@Bean
-	public HalToJsonConverter halToJsonConverter() {
-		return new HalToJsonConverter();
 	}
 	
 	@Bean

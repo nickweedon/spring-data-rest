@@ -55,7 +55,6 @@ import org.springframework.data.rest.webmvc.ResourceMetadataHandlerMethodArgumen
 import org.springframework.data.rest.webmvc.ServerHttpRequestMethodArgumentResolver;
 import org.springframework.data.rest.webmvc.convert.UriListHttpMessageConverter;
 import org.springframework.data.rest.webmvc.json.DomainClassIntrospector;
-import org.springframework.data.rest.webmvc.json.HalToJsonConverter;
 import org.springframework.data.rest.webmvc.json.Jackson2DatatypeHelper;
 import org.springframework.data.rest.webmvc.json.PersistentEntityJackson2Module;
 import org.springframework.data.rest.webmvc.json.PersistentEntityToJsonSchemaConverter;
@@ -85,9 +84,7 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
 
 import com.fasterxml.jackson.databind.Module;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.ser.FilterProvider;
 
 /**
  * Main application configuration for Spring Data REST. To customize how the exporter works, subclass this and override
@@ -148,7 +145,7 @@ public class RepositoryRestMvcConfiguration extends HateoasAwareSpringDataWebCon
 		return new DomainClassConverter<DefaultFormattingConversionService>(defaultConversionService());
 	}
 
-	@Bean @Qualifier("UriDomainClass")
+	@Bean
 	public UriDomainClassConverter uriDomainClassConverter() {
 		return new UriDomainClassConverter(repositories(), domainClassConverter());
 	}
@@ -444,17 +441,12 @@ public class RepositoryRestMvcConfiguration extends HateoasAwareSpringDataWebCon
 		return new PersistentEntityJackson2Module(resourceMappings()) {
 			private static final long serialVersionUID = 3909586849991553446L;
 
-			protected ObjectWriter createObjectWriter(FilterProvider filterProvider) {
-				return halObjectMapper().writer(filterProvider);
+			protected ObjectMapper getObjectMapper() {
+				return halObjectMapper();
 			}
 		};
 	}
 	
-	@Bean
-	public HalToJsonConverter halToJsonConverter() {
-		return new HalToJsonConverter();
-	}
-
 	/**
 	 * Bean for looking up methods annotated with {@link org.springframework.web.bind.annotation.ExceptionHandler}.
 	 * 
