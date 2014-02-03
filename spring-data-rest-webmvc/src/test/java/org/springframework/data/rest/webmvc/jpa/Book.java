@@ -32,7 +32,7 @@ public class Book {
 	Set<Author> authors;
 
 	String title;
-
+	
 	protected Book() {}
 
 	public Book(String isbn, String title, Iterable<Author> authors) {
@@ -46,5 +46,29 @@ public class Book {
 			author.books.add(this);
 			this.authors.add(author);
 		}
+	}
+
+	public String getIsbn() {
+		return isbn;
+	}
+
+	public void setIsbn(String isbn) {
+		this.isbn = isbn;
+	}
+
+	public Set<Author> getAuthors() {
+		return authors;
+	}
+
+	public void setAuthors(Set<Author> authors) {
+		this.authors = authors;
+	}
+
+	public String getTitle() {
+		return title;
+	}
+
+	public void setTitle(String title) {
+		this.title = title;
 	}
 }

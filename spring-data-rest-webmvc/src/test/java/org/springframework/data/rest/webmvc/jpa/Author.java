@@ -22,6 +22,12 @@ import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.Id;
 import javax.persistence.ManyToMany;
+import javax.persistence.Transient;
+
+import org.apache.commons.lang.builder.EqualsBuilder;
+import org.apache.commons.lang.builder.HashCodeBuilder;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity
 public class Author {
@@ -35,7 +41,46 @@ public class Author {
 
 	protected Author() {}
 
+	public String getName() {
+		return name;
+	}
+
+	public void setName(String name) {
+		this.name = name;
+	}
+
 	public Author(String name) {
 		this.name = name;
 	}
+
+	public Author(Long id, String name) {
+		this.id = id;
+		this.name = name;
+	}
+
+	// Simple 'shallow' hash for unit testing
+	@Override
+	public int hashCode() {
+	     return new HashCodeBuilder(13, 31).
+	       append(name).
+	       append(id).
+	       toHashCode();
+	}
+
+	// Simple 'shallow' compare for unit testing
+	@Override
+	public boolean equals(Object obj) {
+		if (obj == null) { return false; }
+		if (obj == this) { return true; }
+		if (obj.getClass() != getClass()) {
+			return false;
+		}
+		Author that = (Author) obj;
+		return new EqualsBuilder()
+			.append(name, that.name)
+			.append(id, that.id)
+			.isEquals();
+	}
+	
+	
 }

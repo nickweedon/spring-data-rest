@@ -6,5 +6,5 @@
   "orderName" : "Mr Burn's order",
   "lineItems" : [ 
   	{ "name" : "Java Chip" },
-  	{ "name" : "Chocolate Mocca " } ]
+  	{ "name" : "Chocolate Mocca" } ]
 }

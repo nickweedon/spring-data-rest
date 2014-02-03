@@ -1,6 +1,6 @@
 { 
   "_links" : {
-    "creator" : { "href" : "http://localhost:8080/persons/1" }
+    "creator" : { "href" : "http://localhost:8080/people/1" }
   },
   "orderName" : "Billy's crazy food order",
   "lineItems" : [ 

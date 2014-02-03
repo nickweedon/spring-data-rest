@@ -23,6 +23,7 @@ import org.springframework.data.rest.core.mapping.ResourceMapping;
 import org.springframework.data.rest.core.mapping.ResourceMappings;
 import org.springframework.data.rest.core.mapping.ResourceMetadata;
 import org.springframework.data.rest.webmvc.support.RepositoryLinkBuilder;
+import org.springframework.data.rest.webmvc.support.RepositoryUriResolver;
 import org.springframework.hateoas.Link;
 import org.springframework.hateoas.Resource;
 import org.springframework.util.Assert;
@@ -87,7 +88,13 @@ public abstract class PersistentEntityJackson2Module extends SimpleModule implem
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	@Override
 	public void afterPropertiesSet() throws Exception {
-		addSerializer(new ResourceSerializer(mappings, config, getObjectMapper()));
+		addSerializer(new ResourceSerializer(mappings, config) {
+			@Override
+			protected ObjectMapper getObjectMapper() {
+				return PersistentEntityJackson2Module.this.getObjectMapper();
+			}
+			
+		});
 		
 		for (Class<?> domainType : repositories) {
 			PersistentEntity<?, ?> pe = repositories.getPersistentEntity(domainType);
@@ -96,29 +103,9 @@ public abstract class PersistentEntityJackson2Module extends SimpleModule implem
 					LOG.warn("The domain class {} does not have PersistentEntity metadata.", domainType.getName());
 				}
 			} else {
-				final ResourceMetadata metadata = mappings.getMappingFor(domainType);
-				final Map<String, TypeDescriptor> exportedAssociationTypeMap = new HashMap<String, TypeDescriptor>();
-				
-				// Build the exported association map for this domain class
-				pe.doWithAssociations(new SimpleAssociationHandler() {
-					/*
-					 * (non-Javadoc)
-					 * @see org.springframework.data.mapping.SimpleAssociationHandler#doWithAssociation(org.springframework.data.mapping.Association)
-					 */
-					@Override
-					public void doWithAssociation(Association<? extends PersistentProperty<?>> association) {
-
-						PersistentProperty<?> property = association.getInverse();
-						
-						if (metadata.isExported(property)) {
-							exportedAssociationTypeMap.put(property.getName(), TypeDescriptor.valueOf(property.getType()));
-						}
-					}
-				});
-				
 				addDeserializer(domainType, 
-						new ResourceDeserializer(pe.getType(), 
-								exportedAssociationTypeMap, uriDomainClassConverter));
+						new ResourceDeserializer(pe, uriDomainClassConverter, mappings.getMappingFor(domainType),
+								new RepositoryUriResolver(repositories, mappings)));
 				registeredDeserializerDomainClasses.add(domainType);
 			}
 		}

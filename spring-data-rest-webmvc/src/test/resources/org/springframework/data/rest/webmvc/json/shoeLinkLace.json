@@ -1,7 +1,0 @@
-{ "_links" : {
-      "lace" : { "href" : "http://localhost:8080/shoeLace/1" }
-    },   
-  "id" : 51,
-  "colour" : "blue",
-  "size" : 11
-}

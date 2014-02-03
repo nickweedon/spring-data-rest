@@ -32,21 +32,21 @@ import com.fasterxml.jackson.databind.ser.impl.SimpleBeanPropertyFilter;
 import com.fasterxml.jackson.databind.ser.impl.SimpleFilterProvider;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 
-class ResourceSerializer extends StdSerializer<PersistentEntityResource<?>> {
+abstract class ResourceSerializer extends StdSerializer<PersistentEntityResource<?>> {
 
 	static final Logger LOG = LoggerFactory.getLogger(PersistentEntityJackson2Module.class);
 	final ResourceMappings mappings;
 	final RepositoryRestConfiguration config;
-	final ObjectMapper objectMapper;
 	
 	@SuppressWarnings({ "unchecked", "rawtypes" }) 
-	ResourceSerializer(ResourceMappings mappings, RepositoryRestConfiguration config, ObjectMapper objectMapper) {
+	ResourceSerializer(ResourceMappings mappings, RepositoryRestConfiguration config) {
 		super((Class) PersistentEntityResource.class);
 		this.mappings = mappings;
 		this.config = config;
-		this.objectMapper = objectMapper;
 	}
 
+	protected abstract ObjectMapper getObjectMapper();
+	
 	/*
 	 * (non-Javadoc)
 	 * @see com.fasterxml.jackson.databind.ser.std.StdSerializer#serialize(java.lang.Object, com.fasterxml.jackson.core.JsonGenerator, com.fasterxml.jackson.databind.SerializerProvider)
@@ -111,7 +111,7 @@ class ResourceSerializer extends StdSerializer<PersistentEntityResource<?>> {
 			// used by the objectmapper (see configuration class).
 			// The custom AnnotationInstrospector associates the 'domain class' with the
 			// filter we defined (an alternative to using the @JsonFilter class annotation)
-			objectMapper.writer(filters).writeValue(jgen, mapResource);
+			getObjectMapper().writer(filters).writeValue(jgen, mapResource);
 		} catch (IllegalStateException e) {
 			throw (IOException) e.getCause();
 		}
