@@ -23,6 +23,9 @@ import javax.persistence.Entity;
 import javax.persistence.Id;
 import javax.persistence.ManyToMany;
 
+import org.apache.commons.lang.builder.EqualsBuilder;
+import org.apache.commons.lang.builder.HashCodeBuilder;
+
 @Entity
 public class Book {
 
@@ -70,5 +73,29 @@ public class Book {
 
 	public void setTitle(String title) {
 		this.title = title;
+	}
+	
+	// Simple 'shallow' hash for unit testing
+	@Override
+	public int hashCode() {
+	     return new HashCodeBuilder(17, 13).
+	       append(title).
+	       append(isbn).
+	       toHashCode();
+	}
+
+	// Simple 'shallow' compare for unit testing
+	@Override
+	public boolean equals(Object obj) {
+		if (obj == null) { return false; }
+		if (obj == this) { return true; }
+		if (obj.getClass() != getClass()) {
+			return false;
+		}
+		Book that = (Book) obj;
+		return new EqualsBuilder()
+			.append(title, that.title)
+			.append(isbn, that.isbn)
+			.isEquals();
 	}
 }

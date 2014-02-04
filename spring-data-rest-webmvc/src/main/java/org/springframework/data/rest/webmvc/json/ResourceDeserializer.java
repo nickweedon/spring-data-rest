@@ -63,28 +63,11 @@ class ResourceDeserializer<T extends Object> extends StdDeserializer<T> {
 			dumpTokenBuffer(domainObjectBuffer);
 		}
 		
+		// Use a standard object mapper to read the token buffer
+		// Reading the value through filteredJp will cause infinite recursion of this method
 		ObjectMapper objectMapper = new ObjectMapper();
 		JsonParser filteredJp = domainObjectBuffer.asParser();
-
-		
 		Object entity = objectMapper.readValue(filteredJp, handledType());
-
-		/*
-		Order order = (Order) objectMapper.readValue(filteredJp, handledType());
-		Object entity = order;
-
-		
-		System.out.println("============ Domain Object ============");
-		System.out.println("Order name: " + order.getOrderName());
-		for(LineItem lineItem : order.getLineItems()) {
-			System.out.println("Name: " + lineItem.getName());
-		}
-		Person creator = order.getCreator();
-		System.out.println("Creator: " + creator.getFirstName() + " " + creator.getLastName());
-		*/
-		
-		//System.out.println(ReflectionToStringBuilder.toString(domainObject));
-		
 
 		return (T) entity;
 	}

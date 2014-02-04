@@ -4,9 +4,13 @@ package org.springframework.data.rest.webmvc.json;
 import static org.junit.Assert.*;
 import static org.hamcrest.Matchers.*;
 import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -24,7 +28,9 @@ import org.springframework.data.rest.core.mapping.ResourceMappings;
 import org.springframework.data.rest.webmvc.jpa.Author;
 import org.springframework.data.rest.webmvc.jpa.Book;
 import org.springframework.data.rest.webmvc.jpa.Order;
+import org.springframework.data.rest.webmvc.jpa.Person;
 import org.springframework.data.rest.webmvc.support.RepositoryUriResolver;
+import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ContextConfiguration;
@@ -77,9 +83,87 @@ public class ResourceDeserializerTests {
 		deserializeJsonFile("bookLinkAuthor.json", Book.class);
 	}
 
+	/**
+	 * The emphasis of this test is to ensure that a 'collection' type link
+	 * with only one element can be successfully retrieved.
+	 * 
+	 * @throws Exception
+	 */
+	@Test
+	public void deserializeBookLinkAuthor() throws Exception {
+		Author author = new Author((long)57, "Joshua Bloch");
+		addUrlObject("http://localhost:8080/authors/57", author);
+
+		addDerserializer(Book.class);
+		Book book = deserializeJsonFile("bookLinkAuthor.json", Book.class);
+
+		assertThat(book, is(notNullValue()));
+		assertEquals("Effective Java", book.getTitle());
+		assertEquals("978-0321356680", book.getIsbn());
+
+		assertThat(book.getAuthors(), is(notNullValue()));
+		assertTrue(book.getAuthors().contains(author));
+	}
+	
+	/**
+	 * The emphasis of this test is to ensure that a 'non-collection' type link
+	 * can be successfully retrieved.
+	 * 
+	 * @throws Exception
+	 */
+	@Test 
+	public void deserializesOrderLinkCreator() throws Exception {
+		addDerserializer(Order.class);
+
+		Person person = new Person("Ronald", "McDonald");
+		
+		addUrlObject("http://localhost:8080/people/2", person);
+		
+		Order order = deserializeJsonFile("orderLinkCreator.json", Order.class);
+		
+		assertThat(order, is(notNullValue()));
+		// Assert that the ID not was set
+		assertThat(order.getId(), is(nullValue()));
+
+		assertEquals("Junk food", order.getOrderName());
+		
+		// Assert that the 'creator' was set via the '_links' section of the Json request
+		assertThat(order.getCreator(), is(notNullValue()));
+		assertEquals(person.getFirstName(), order.getCreator().getFirstName());
+		assertEquals(person.getLastName(), order.getCreator().getLastName());
+	}
+
+	@Test
+	public void deserializeBookLinkAuthors() throws Exception {
+		Author joshua = new Author((long)57, "Joshua Bloch");
+		addUrlObject("http://localhost:8080/authors/57", joshua);
+
+		Author brian = new Author((long)57, "Brian Goetz");
+		addUrlObject("http://localhost:8080/authors/28", brian);
+
+		Author tim = new Author((long)5, "Tim Peierls");
+		addUrlObject("http://localhost:8080/authors/5", tim);
+		
+		addDerserializer(Book.class);
+		Book book = deserializeJsonFile("bookLinkAuthors.json", Book.class);
+
+		assertThat(book, is(notNullValue()));
+		assertEquals("Java Concurrency in Practice", book.getTitle());
+		assertEquals("978-0321349606", book.getIsbn());
+
+		assertThat(book.getAuthors(), is(notNullValue()));
+		assertTrue(book.getAuthors().containsAll(Arrays.asList(joshua, brian, tim)));
+	}
+	
+	/**
+	 * This test should pass even if the standard Jackson serializer was used,
+	 * its purpose is to guard against regression.
+	 * 
+	 * @throws Exception
+	 */
 	@Test
 	public void deserializesBookInlineAuthor() throws Exception {
-		addDerserializer(Order.class);
+		addDerserializer(Book.class);
 		
 		Book book = deserializeJsonFile("bookInlineAuthor.json", Book.class);
 		
@@ -112,6 +196,30 @@ public class ResourceDeserializerTests {
 		assertThat(book.getAuthors(), is(notNullValue()));
 		assertTrue(book.getAuthors().contains(new Author(null, "Joshua Bloch")));
 	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	public void deserializesBookInlineAuthorLinkBook() throws Exception {
+		addDerserializer(Book.class);
+
+		Book transitiveBook = new Book("978-0321349606", "Java Concurrency in Practice", Collections.EMPTY_LIST);
+		addUrlObject("http://localhost:8080/books/7", transitiveBook);
+		
+		Book book = deserializeJsonFile("bookInlineAuthorLinkBook.json", Book.class);
+		
+		assertThat(book, is(notNullValue()));
+		assertEquals("Effective Java", book.getTitle());
+		assertEquals("978-0321356680", book.getIsbn());
+
+		assertThat(book.getAuthors(), is(notNullValue()));
+		assertTrue(book.getAuthors().contains(new Author(null, "Joshua Bloch")));
+
+		Author resultAuthor = book.getAuthors().iterator().next();
+		assertThat(resultAuthor.getBooks(), is(notNullValue()));
+		assertTrue(resultAuthor.getBooks().contains(transitiveBook));
+	}
+	
+	//////////////////////////////////// Helper methods ///////////////////////////////////////////////
 	
 	private void addUrlObject(String uri, Object object) {
 		when(mockUriConverter.convert(URI.create(uri), 

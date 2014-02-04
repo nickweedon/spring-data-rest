@@ -41,6 +41,14 @@ public class Author {
 
 	protected Author() {}
 
+	public Set<Book> getBooks() {
+		return books;
+	}
+
+	public void setBooks(Set<Book> books) {
+		this.books = books;
+	}
+
 	public String getName() {
 		return name;
 	}
