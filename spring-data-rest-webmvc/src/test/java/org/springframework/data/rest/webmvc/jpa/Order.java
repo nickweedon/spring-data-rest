@@ -26,9 +26,11 @@ import javax.persistence.Id;
 import javax.persistence.ManyToOne;
 import javax.persistence.OneToMany;
 import javax.persistence.Table;
+import javax.persistence.Transient;
 
 import org.hibernate.annotations.GenericGenerator;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
@@ -51,19 +53,6 @@ public class Order {
 	public Order(Person creator) {
 		this.creator = creator;
 	}
-	
-	private String orderName;
-	public String getOrderName() {
-		return orderName;
-	}
-
-	public void setId(Long id) {
-		this.id = id;
-	}
-	
-	public void setOrderName(String orderName) {
-		this.orderName = orderName;
-	}
 
 	protected Order() {
 
@@ -71,6 +60,39 @@ public class Order {
 
 	public Long getId() {
 		return id;
+	}
+
+	public void setId(Long id) {
+		this.id = id;
+	}
+	
+	private String orderName;
+
+	public String getOrderName() {
+		return orderName;
+	}
+
+	public void setOrderName(String orderName) {
+		this.orderName = orderName;
+	}
+
+	@Transient
+	@JsonIgnore
+	public double getTax() {
+		return 15.21;
+	}
+
+	@JsonProperty("internalCode")
+	private String IOC; // (internal order code)
+
+	@JsonProperty("internalCode")
+	public String getIOC() {
+		return IOC;
+	}
+
+	@JsonProperty("internalCode")
+	public void setIOC(String iOC) {
+		IOC = iOC;
 	}
 
 	public Person getCreator() {

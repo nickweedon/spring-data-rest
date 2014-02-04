@@ -68,10 +68,12 @@ public class TestDataPopulator {
 		
 		orderList.add(new Order(person));
 		orderList.getLast().setOrderName("Billy bob's chipies");
+		orderList.getLast().setIOC("IOC-526");
 		orderList.getLast().add(new LineItem("Java Chip"));
 
 		orderList.add(new Order(person));
 		orderList.getLast().setOrderName("Jane's makeup obsession");
+		orderList.getLast().setIOC("IOC-257");
 		orderList.getLast().add(new LineItem("Black super tart eyeliner"));
 		
 		orders.save(orderList);

@@ -39,8 +39,6 @@ import org.springframework.web.util.UrlPathHelper;
  */
 public class ResourceMetadataHandlerMethodArgumentResolver implements HandlerMethodArgumentResolver {
 
-	//private final Repositories repositories;
-	//private final ResourceMappings mappings;
 	private final RepositoryUriResolver repoositoryUriResolver;
 	
 	/**
