@@ -73,6 +73,11 @@ abstract class ResourceSerializer extends StdSerializer<PersistentEntityResource
 
 		final Map<String, Object> model = new LinkedHashMap<String, Object>();
 
+		// Currently the adding of association links is deterministic per domain class.
+		// It is tempting for this reason to set up the filter and links at configuration time.
+		// This is potentially a bad idea however as it makes it difficult to add later changes
+		// that add links based on factors other than those strictly pertinent to the 
+		// domain class (such as inlining associations based on query parameters).
 		try {
 			final Set<String> filteredProperties = new HashSet<String>();
 
